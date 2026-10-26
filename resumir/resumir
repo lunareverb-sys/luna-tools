@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""resumir: roda um comando (ou lê stdin), guarda a saída inteira em arquivo e imprime só um resumo.
+Uso: resumir [-n LINHAS] [-o arquivo] -- comando args...   |   comando | resumir
+Saída completa em $RESUMIR_DIR (padrão: pasta temporária do sistema).
+Ideia: Headroom (headroomlabs-ai/headroom), versão local sem proxy."""
+import sys, os, re, subprocess, tempfile, time, argparse
+
+ap = argparse.ArgumentParser()
+ap.add_argument("-n", type=int, default=8, help="linhas de início/fim")
+ap.add_argument("-e", type=int, default=15, help="máx. linhas de erro")
+ap.add_argument("-o", help="arquivo de saída")
+ap.add_argument("cmd", nargs="*")
+a = ap.parse_args()
+
+d = os.environ.get("RESUMIR_DIR") or os.path.join(tempfile.gettempdir(), "resumir")
+os.makedirs(d, exist_ok=True)
+out = a.o or os.path.join(d, time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}.txt")
+rc = None
+if a.cmd:
+    with open(out, "wb") as f:
+        rc = subprocess.run(a.cmd, stdout=f, stderr=subprocess.STDOUT).returncode
+else:
+    with open(out, "wb") as f:
+        for chunk in iter(lambda: sys.stdin.buffer.read(65536), b""):
+            f.write(chunk)
+lines = open(out, errors="replace").read().splitlines()
+pat = re.compile(r"error|erro|fail|falh|exception|traceback|fatal|warning|denied|not found", re.I)
+errs = [(i + 1, l) for i, l in enumerate(lines) if pat.search(l)]
+cut = lambda s: s if len(s) <= 200 else s[:200] + "…"
+n = a.n
+print(f"[resumir] {len(lines)} linhas, {os.path.getsize(out)} bytes" + (f", saída={rc}" if rc is not None else "") + f" → {out}")
+if len(lines) <= 2 * n:
+    for l in lines: print(cut(l))
+else:
+    for l in lines[:n]: print(cut(l))
+    print(f"[… {len(lines) - 2 * n} linhas no arquivo …]")
+    if errs:
+        print(f"[{len(errs)} linhas com erro/aviso; primeiras {min(len(errs), a.e)}:]")
+        for i, l in errs[:a.e]: print(f"{i}: {cut(l)}")
+        print("[… fim …]")
+    for l in lines[-n:]: print(cut(l))
+sys.exit(rc or 0)

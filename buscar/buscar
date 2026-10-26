@@ -1,0 +1,34 @@
+#!/bin/sh
+# buscar "termo" [n] — busca numa SearXNG local (sobe sob demanda em 127.0.0.1:8888). Saída: título, link e trecho de cada resultado.
+# Sem rastreio, sem chave, sem limite de API; os motores (DuckDuckGo, Bing, Wikipedia, GitHub…)
+# são consultados por ela.
+# Requer SearXNG instalada (AGPL-3.0, não incluída aqui). Variáveis:
+#   SEARXNG_PY        python do venv onde o SearXNG está instalado (padrão: ./searxng-venv/bin/python)
+#   SEARXNG_SETTINGS  arquivo de configuração (padrão: ./searxng-settings.yml; modelo em searxng-settings.exemplo.yml)
+D=$(cd "$(dirname "$0")" && pwd)
+PORTA=8888
+PY=${SEARXNG_PY:-$D/searxng-venv/bin/python}
+CFG=${SEARXNG_SETTINGS:-$D/searxng-settings.yml}
+LOG=${TMPDIR:-/tmp}/searxng-buscar.log
+if ! curl -s -o /dev/null "http://127.0.0.1:$PORTA/healthz"; then
+  SEARXNG_SETTINGS_PATH="$CFG" nohup "$PY" -m searx.webapp \
+    >"$LOG" 2>&1 &
+  i=0; until curl -s -o /dev/null "http://127.0.0.1:$PORTA/healthz"; do
+    i=$((i+1)); [ $i -gt 40 ] && { echo "a busca não subiu (veja $LOG)" >&2; exit 1; }; sleep 0.5; done
+fi
+[ -n "$1" ] || { echo "uso: buscar \"termo\" [n]" >&2; exit 2; }
+N=${2:-8}
+curl -s -G "http://127.0.0.1:$PORTA/search" --data-urlencode "q=$1" -d format=json -d language=pt-BR |
+  "$PY" -c '
+import json, sys
+n = int(sys.argv[1])
+d = json.load(sys.stdin)
+for r in d.get("results", [])[:n]:
+    print("-", r.get("title", "").strip())
+    print(" ", r.get("url", ""))
+    t = " ".join((r.get("content") or "").split())
+    if t:
+        print(" ", t[:300])
+if not d.get("results"):
+    print("(nada achado; motores que falharam: %s)" % ", ".join(e[0] for e in d.get("unresponsive_engines", [])))
+' "$N"

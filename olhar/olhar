@@ -1,0 +1,27 @@
+#!/bin/sh
+# olhar <url|arquivo.html|imagem> [pasta-de-saída]
+# Ideia: o agente fotografa o que montou antes de dizer "pronto".
+# Tira 2 prints com o Chromium headless (sem janela, sem mexer no seu navegador):
+#   celular (390x844, modo escuro) e computador (1440x900, claro), esperando o JS (até 8 s).
+# Depois abra os PNGs e confira: texto cortado, sobreposição, fonte que não carregou,
+# número/nome errado.
+# Chromium: variável CHROME, ou chromium/chromium-browser/google-chrome no PATH.
+# OLHAR_NO_SANDBOX=1 liga --no-sandbox (só dentro de container; não use com URL desconhecida).
+set -e
+[ -n "$1" ] || { echo "uso: olhar <url|arquivo.html> [pasta-de-saída]" >&2; exit 2; }
+ALVO=$1
+case "$ALVO" in http://*|https://*|file://*) URL=$ALVO ;; *) URL="file://$(cd "$(dirname "$ALVO")" && pwd)/$(basename "$ALVO")" ;; esac
+SAIDA=${2:-.}
+mkdir -p "$SAIDA"
+C=${CHROME:-$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)}
+[ -n "$C" ] && [ -x "$C" ] || { echo "Chromium não encontrado: defina CHROME=/caminho/do/chrome" >&2; exit 1; }
+SB=""; [ "$OLHAR_NO_SANDBOX" = 1 ] && SB="--no-sandbox"
+NOME=$(basename "$ALVO" | sed 's/[^A-Za-z0-9._-]/_/g; s/\.[^.]*$//')
+tirar() {  # $1 nome  $2 largura,altura  $3 extra
+  timeout 60 "$C" --headless=new $SB --disable-gpu --hide-scrollbars \
+    --user-data-dir="$(mktemp -d)" --window-size="$2" --virtual-time-budget=8000 $3 \
+    --screenshot="$SAIDA/$NOME-$1.png" "$URL" >/dev/null 2>&1 || true
+  [ -s "$SAIDA/$NOME-$1.png" ] && echo "$SAIDA/$NOME-$1.png" || echo "FALHOU: print $1" >&2
+}
+tirar celular-escuro 390,844 --force-dark-mode
+tirar computador-claro 1440,900 ""

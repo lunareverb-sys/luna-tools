@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""risco <repo> [n] — ranking dos arquivos onde vale olhar primeiro. Ideia: Repowise
+(risco por arquivo sem IA). Nota = mudanças nos últimos 90 dias (git) × tamanho ×
+ramificações (if/for/while/try/and/or por função, contadas com ast). Só leitura, só stdlib."""
+import ast, subprocess, sys
+from collections import Counter
+from pathlib import Path
+
+repo = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
+n = int(sys.argv[2]) if len(sys.argv) > 2 else 10
+log = subprocess.run(["git", "-C", str(repo), "log", "--since=90 days ago", "--numstat", "--format="],
+                     capture_output=True, text=True).stdout
+mud = Counter()
+for l in log.splitlines():
+    p = l.split("\t")
+    if len(p) == 3 and p[0].isdigit():
+        mud[p[2]] += int(p[0]) + int(p[1])
+linhas = []
+for arq, m in mud.items():
+    f = repo / arq
+    if not f.exists() or f.suffix not in (".py", ".sh", ".js", ".ts"):
+        continue
+    txt = f.read_text(errors="replace")
+    tam = txt.count("\n") + 1
+    ram, maior = 0, ("", 0)
+    if f.suffix == ".py":
+        try:
+            arv = ast.parse(txt)
+            for fn in ast.walk(arv):
+                if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    r = sum(isinstance(x, (ast.If, ast.For, ast.While, ast.Try, ast.BoolOp, ast.IfExp,
+                                           ast.ExceptHandler, ast.With)) for x in ast.walk(fn))
+                    ram += r
+                    if r > maior[1]:
+                        maior = (fn.name, r)
+        except SyntaxError:
+            ram = -1
+    nota = m * (1 + tam / 200) * (1 + max(ram, 0) / 20)
+    linhas.append((nota, arq, m, tam, ram, maior))
+linhas.sort(reverse=True)
+print(f"Risco em {repo.name} (90 dias): nota · arquivo · linhas mudadas · tamanho · ramificações · função mais enrolada")
+for nota, arq, m, tam, ram, maior in linhas[:n]:
+    print(f"{nota:8.0f}  {arq}  mud={m} tam={tam} ram={'erro de sintaxe' if ram < 0 else ram}"
+          + (f"  ({maior[0]}: {maior[1]})" if maior[0] else ""))

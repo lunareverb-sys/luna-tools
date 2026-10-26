@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+.segredos/
+searxng-settings.yml
+searxng-venv/
+*.log
+*.png
