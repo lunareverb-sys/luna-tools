@@ -2,9 +2,14 @@
 # Hook pre-commit: barra commit com cara de segredo nos arquivos adicionados.
 # Token de bot do Discord, chave de API (sk-, ghp_, AKIA, xox), chave privada, senha= com valor.
 PADRAO='[MN][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}|sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(senha|password|passwd|token|secret)["'\'' ]*[:=]["'\'' ]*[A-Za-z0-9_\-]{12,}'
-if git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' | grep -Eiq "$PADRAO"; then
+# Só linhas adicionadas (sem o "+"); cabeçalhos de arquivo são os que vêm antes do 1º "@@" de cada arquivo.
+# (Filtrar por '^+++' derrubava linhas de conteúdo que começam com "++".)
+adicionadas() {
+  git diff --cached -U0 --no-color | awk '/^diff --git /{h=1;next} /^@@/{h=0;next} !h && /^\+/{print substr($0,2)}'
+}
+if adicionadas | grep -Eiq "$PADRAO"; then
   echo "BLOQUEADO: o commit parece ter segredo (token/chave/senha). Tire do código (guarde o segredo fora do repositório, p. ex. variável de ambiente ou gerenciador de senhas) e tente de novo." >&2
-  git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' | grep -Eio "$PADRAO" | sed 's/\(.\{6\}\).*/\1… (cortado)/' >&2
+  adicionadas | grep -Eio "$PADRAO" | sed 's/\(.\{6\}\).*/\1… (cortado)/' >&2
   exit 1
 fi
 exit 0

@@ -33,12 +33,12 @@ for arq, m in mud.items():
                     ram += r
                     if r > maior[1]:
                         maior = (fn.name, r)
-        except SyntaxError:
+        except (SyntaxError, RecursionError, ValueError, MemoryError):  # arquivo ilegível ou patológico
             ram = -1
     nota = m * (1 + tam / 200) * (1 + max(ram, 0) / 20)
     linhas.append((nota, arq, m, tam, ram, maior))
 linhas.sort(reverse=True)
 print(f"Risco em {repo.name} (90 dias): nota · arquivo · linhas mudadas · tamanho · ramificações · função mais enrolada")
 for nota, arq, m, tam, ram, maior in linhas[:n]:
-    print(f"{nota:8.0f}  {arq}  mud={m} tam={tam} ram={'erro de sintaxe' if ram < 0 else ram}"
+    print(f"{nota:8.0f}  {arq}  mud={m} tam={tam} ram={'não analisado' if ram < 0 else ram}"
           + (f"  ({maior[0]}: {maior[1]})" if maior[0] else ""))

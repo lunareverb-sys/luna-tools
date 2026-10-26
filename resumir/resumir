@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """resumir: roda um comando (ou lê stdin), guarda a saída inteira em arquivo e imprime só um resumo.
 Uso: resumir [-n LINHAS] [-o arquivo] -- comando args...   |   comando | resumir
-Saída completa em $RESUMIR_DIR (padrão: pasta temporária do sistema).
+Saída completa em $RESUMIR_DIR (padrão: pasta privada do usuário na pasta temporária; arquivos 0600).
 Ideia: Headroom (headroomlabs-ai/headroom), versão local sem proxy."""
 import sys, os, re, subprocess, tempfile, time, argparse
 
@@ -12,15 +12,23 @@ ap.add_argument("-o", help="arquivo de saída")
 ap.add_argument("cmd", nargs="*")
 a = ap.parse_args()
 
-d = os.environ.get("RESUMIR_DIR") or os.path.join(tempfile.gettempdir(), "resumir")
-os.makedirs(d, exist_ok=True)
+d = os.environ.get("RESUMIR_DIR") or os.path.join(tempfile.gettempdir(), f"resumir-{os.getuid()}")
+os.makedirs(d, mode=0o700, exist_ok=True)
+if os.stat(d).st_uid != os.getuid():
+    sys.exit(f"[resumir] {d} pertence a outro usuário: defina RESUMIR_DIR para uma pasta sua")
 out = a.o or os.path.join(d, time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}.txt")
+
+
+def abrir():  # saída pode ter segredo: só o dono lê; nome automático nunca reaproveita arquivo existente
+    return os.fdopen(os.open(out, os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if a.o else os.O_EXCL), 0o600), "wb")
+
+
 rc = None
 if a.cmd:
-    with open(out, "wb") as f:
+    with abrir() as f:
         rc = subprocess.run(a.cmd, stdout=f, stderr=subprocess.STDOUT).returncode
 else:
-    with open(out, "wb") as f:
+    with abrir() as f:
         for chunk in iter(lambda: sys.stdin.buffer.read(65536), b""):
             f.write(chunk)
 lines = open(out, errors="replace").read().splitlines()

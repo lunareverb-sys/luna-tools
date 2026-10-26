@@ -5,7 +5,7 @@ PRIVACIDADE: o domínio/IP consultado é ENVIADO a terceiros (rdap.org, cloudfla
 Não consulte nada que não possa ser revelado a eles. Use só para triagem legítima.
 Fontes abertas, sem chave: RDAP (rdap.org), DNS por HTTPS (Cloudflare), certificados (crt.sh).
 Só consulta: não acessa o site nem faz varredura. Cada linha diz a fonte."""
-import ipaddress, json, sys, urllib.parse, urllib.request
+import ipaddress, json, re, sys, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
 UA = {"User-Agent": "luna-ficha/1.0", "Accept": "application/json, application/dns-json"}
@@ -35,19 +35,43 @@ def dias(data):
         return None
 
 
-alvo = sys.argv[1].strip().lower().removeprefix("http://").removeprefix("https://").split("/")[0] if len(sys.argv) > 1 else ""
+INTERNOS = (".local", ".localhost", ".lan", ".internal", ".intranet", ".corp", ".home", ".localdomain", ".arpa")
+
+
+def extrai_alvo(txt):
+    """Aceita domínio, IP ou URL; devolve só o host (sem esquema, usuário, porta, colchetes ou ponto final)."""
+    txt = txt.strip().lower()
+    try:
+        ipaddress.ip_address(txt)
+        return txt
+    except ValueError:
+        pass
+    try:
+        host = urllib.parse.urlsplit(txt if "://" in txt else "//" + txt).hostname or ""
+    except ValueError:
+        return ""
+    return host.rstrip(".")
+
+
+alvo = extrai_alvo(sys.argv[1]) if len(sys.argv) > 1 else ""
 if not alvo:
     print("uso: ficha <domínio|IP>"); sys.exit(2)
 try:
     ip = ipaddress.ip_address(alvo)
+    ip = getattr(ip, "ipv4_mapped", None) or ip
 except ValueError:
     ip = None
+    # só nome de host válido (com ponto e TLD não numérico) segue; o resto não sai da máquina
+    rotulos = alvo.split(".")
+    if len(rotulos) < 2 or rotulos[-1].isdigit() or not all(
+            re.fullmatch(r"[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?", r) for r in rotulos):
+        print("# Ficha: alvo inválido ou sem ponto (nome interno?): nenhuma consulta externa feita"); sys.exit(2)
 print(f"# Ficha: {alvo}  ({datetime.now():%d/%m/%Y %H:%M})")
 alertas = []
-if ip and (ip.is_private or ip.is_loopback or ip.is_link_local):
-    # endereço interno nunca sai da máquina
-    print("- IP privado/local: nenhuma consulta externa feita")
-    alertas.append("IP privado (rede interna)")
+if (ip and not ip.is_global) or (ip is None and alvo.endswith(INTERNOS)):
+    # endereço ou nome interno nunca sai da máquina
+    print("- IP/nome interno ou reservado: nenhuma consulta externa feita")
+    alertas.append("endereço interno ou reservado")
 elif ip:
     rd = get(f"https://rdap.org/ip/{alvo}")
     print(f"- RDAP (rdap.org): rede {rd.get('name', '?')} · {rd.get('startAddress', '')}–{rd.get('endAddress', '')} · país {rd.get('country', '?')}")
