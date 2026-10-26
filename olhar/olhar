@@ -17,12 +17,15 @@ C=${CHROME:-$(command -v chromium || command -v chromium-browser || command -v g
 [ -n "$C" ] && [ -x "$C" ] || { echo "Chromium não encontrado: defina CHROME=/caminho/do/chrome" >&2; exit 1; }
 SB=""; [ "$OLHAR_NO_SANDBOX" = 1 ] && SB="--no-sandbox"
 NOME=$(basename "$ALVO" | sed 's/[^A-Za-z0-9._-]/_/g; s/\.[^.]*$//')
+PERFIL=""
+trap '[ -z "$PERFIL" ] || rm -rf "$PERFIL"' EXIT  # perfil não sobra nem com erro ou Ctrl-C
+trap 'exit 130' INT TERM
 tirar() {  # $1 nome  $2 largura,altura  $3 extra
   PERFIL=$(mktemp -d)  # perfil descartável: some ao fim do print (cache e cookies da página não ficam)
   timeout 60 "$C" --headless=new $SB --disable-gpu --hide-scrollbars \
     --user-data-dir="$PERFIL" --window-size="$2" --virtual-time-budget=8000 $3 \
     --screenshot="$SAIDA/$NOME-$1.png" "$URL" >/dev/null 2>&1 || true
-  rm -rf "$PERFIL"
+  rm -rf "$PERFIL"; PERFIL=""
   [ -s "$SAIDA/$NOME-$1.png" ] && echo "$SAIDA/$NOME-$1.png" || echo "FALHOU: print $1" >&2
 }
 tirar celular-escuro 390,844 --force-dark-mode

@@ -18,6 +18,10 @@ find "$R" -name __pycache__ -exec rm -rf {} + 2>/dev/null
 for a in 192.168.1.5 192.168.1.5:8080 http://192.168.1.5:8080/x user@10.0.0.7 "[::1]" "[fd00::1]:443" 10.0.0.7. 3232235781 ::ffff:10.0.0.1 100.64.0.1 nas.corp host-interno localhost; do
   checa "ficha não consulta '$a'" "$(python3 -I "$R/tests/ficha_sonda.py" "$R/ficha/ficha" "$a")" 0
 done
+for a in algo.lan algo.local a.b.internal x.corp casa.home h.localdomain host-interno; do
+  checa "ficha '$a': mensagem de nome interno" "$(python3 -I "$R/ficha/ficha" "$a" 2>&1 | grep -c '^nome interno: nenhuma consulta externa feita$')" 1
+  checa "ficha '$a': zero consultas" "$(python3 -I "$R/tests/ficha_sonda.py" "$R/ficha/ficha" "$a")" 0
+done
 [ "$(python3 -I "$R/tests/ficha_sonda.py" "$R/ficha/ficha" example.com)" -gt 0 ] && ok "ficha consulta domínio público" || falha "ficha consulta domínio público"
 checa "ficha limpa URL com usuário e porta" "$(python3 -I "$R/tests/ficha_sonda.py" "$R/ficha/ficha" 'https://U@Example.com:8443/a?b#c')" 8
 [ "$(python3 -I "$R/tests/ficha_sonda.py" "$R/ficha/ficha" 8.8.8.8)" -gt 0 ] && ok "ficha consulta IP público" || falha "ficha consulta IP público"
@@ -26,6 +30,8 @@ checa "ficha limpa URL com usuário e porta" "$(python3 -I "$R/tests/ficha_sonda
 TMPDIR=$T python3 -I "$R/resumir/resumir" -- sh -c 'echo ola' >/dev/null
 D=$(ls -d "$T"/resumir-*); checa "resumir: pasta 700" "$(stat -c %a "$D")" 700
 checa "resumir: arquivo 600" "$(stat -c %a "$D"/*.txt)" 600
+mkdir -m 755 "$T/antiga"; RESUMIR_DIR=$T/antiga python3 -I "$R/resumir/resumir" -- sh -c 'echo ola' >/dev/null
+checa "resumir: pasta que já existia vira 700" "$(stat -c %a "$T/antiga")" 700
 checa "resumir preserva código de saída" "$(python3 -I "$R/resumir/resumir" -- sh -c 'exit 3' >/dev/null; echo $?)" 3
 
 # hook (F3): token comum, token em linha que começa com "++", arquivo limpo

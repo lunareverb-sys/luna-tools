@@ -16,6 +16,7 @@ d = os.environ.get("RESUMIR_DIR") or os.path.join(tempfile.gettempdir(), f"resum
 os.makedirs(d, mode=0o700, exist_ok=True)
 if os.stat(d).st_uid != os.getuid():
     sys.exit(f"[resumir] {d} pertence a outro usuário: defina RESUMIR_DIR para uma pasta sua")
+os.chmod(d, 0o700)  # pasta que já existia (criada antes, com umask aberta) também fica só do dono
 out = a.o or os.path.join(d, time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}.txt")
 
 

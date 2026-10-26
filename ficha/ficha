@@ -61,16 +61,19 @@ try:
     ip = getattr(ip, "ipv4_mapped", None) or ip
 except ValueError:
     ip = None
-    # só nome de host válido (com ponto e TLD não numérico) segue; o resto não sai da máquina
+    # nome interno (sufixo de rede privada ou sem ponto) nunca sai da máquina
+    if "." not in alvo or alvo.endswith(INTERNOS):
+        print("nome interno: nenhuma consulta externa feita"); sys.exit(2)
+    # só nome de host válido (TLD não numérico) segue; o resto não sai da máquina
     rotulos = alvo.split(".")
-    if len(rotulos) < 2 or rotulos[-1].isdigit() or not all(
+    if rotulos[-1].isdigit() or not all(
             re.fullmatch(r"[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?", r) for r in rotulos):
-        print("# Ficha: alvo inválido ou sem ponto (nome interno?): nenhuma consulta externa feita"); sys.exit(2)
+        print("# Ficha: alvo inválido: nenhuma consulta externa feita"); sys.exit(2)
 print(f"# Ficha: {alvo}  ({datetime.now():%d/%m/%Y %H:%M})")
 alertas = []
-if (ip and not ip.is_global) or (ip is None and alvo.endswith(INTERNOS)):
-    # endereço ou nome interno nunca sai da máquina
-    print("- IP/nome interno ou reservado: nenhuma consulta externa feita")
+if ip and not ip.is_global:
+    # endereço interno nunca sai da máquina
+    print("- IP interno ou reservado: nenhuma consulta externa feita")
     alertas.append("endereço interno ou reservado")
 elif ip:
     rd = get(f"https://rdap.org/ip/{alvo}")
